@@ -1,0 +1,131 @@
+name: "Snyk source composition analysis"
+description: "This action leverages Snyk Open Source to scan dependencies for known license issues and vulnerabilities."
+inputs:
+  snyk_api_key:
+    description: "Expects a string value corresponding to the API key to use when accessing the Snyk organization."
+    required: true
+  path_to_dependency_file:
+    description: "Expects the relative GitHub path to the dependency file to test."
+    required: true
+  integrate_with_snyk_platform:
+    description: 'If this is true, the repository will be integrated with the Snyk platform.'
+    required: false
+    default: false
+  snyk_org_id:
+    description: "Expects a string value corresponding to the Snyk organization ID. It expects a GUID format. This is required if 'integrate_with_snyk_platform' is 'true'."
+    required: false
+  snyk_integration_id:
+    description: "Expects a string value corresponding to the Integration ID for a source control provider. This is required if 'integrate_with_snyk_platform' is 'true'."
+    required: false
+  repository:
+    description: "Expects the GitHub repository to import to the Snyk platform or post a GitHub Issue to. This is required if either 'integrate_with_snyk_platform' or 'create_github_issues' is 'true'."
+    required: false
+  branch_name:
+    description: "Expects the GitHub repository branch name that should be imported into Snyk. This is required if 'integrate_with_snyk_platform' is 'true'."
+    required: false
+  upload_sarif:
+    description: 'If this is true, details of the Snyk scan will be uploaded as a SARIF file to the Security tab of a repository.'
+    required: false
+    default: false 
+  create_github_issues:
+    description: 'If this is true, details of the Snyk scan will be posted to the Issues tab of a repository.'
+    required: false
+    default: false
+  github_issue_assignee:
+    description: "Expects a string value corresponding to the GitHub user to assign issues to if 'create_github_issues' is 'true'."
+    required: false
+  security_issues_labels:
+    description: "The labels that should be applied to security-related GitHub Issues if 'create_github_issues' is 'true'."
+    required: false
+  license_issues_labels:
+    description: "The labels that should be applied to license compliance-related GitHub Issues if 'create_github_issues' is 'true'."
+    required: false 
+  snyk_github_integration_token:
+    description: "GitHub token to use for posting issues. This is required if 'create_github_issues' is 'true'."
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout private tools
+      run: git clone --branch main https://github.com/awshole/power-snyk.git
+      shell: pwsh
+    - name: Import to Snyk platform
+      run: |
+        if ('${{ inputs.integrate_with_snyk_platform }}' -like 'true' ) {
+            Write-Output "Importing repository into the Snyk platform."
+            $splat = @{
+              dotSourceFilePath = 'power-snyk/functions/functions.ps1'
+              snykApiKey = '${{ inputs.snyk_api_key }}'
+              snykOrgId = '${{ inputs.snyk_org_id }}'
+              integrationId = '${{ inputs.snyk_integration_id }}'
+              repository = '${{ inputs.repository }}'
+              branchName = '${{ inputs.branch_name }}'
+            }
+            power-snyk/scripts/Set-SnykProject.ps1 @splat
+          }
+      shell: pwsh
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cat ${{ inputs.path_to_dependency_file }} | sed -e '/^\s*#.*$/d' -e '/^\s*$/d' | xargs -n 1 pip install || true
+      shell: bash
+    - name: Install Snyk
+      run: |
+        wget -q https://github.com/snyk/snyk/releases/download/v1.518.0/snyk-linux
+        chmod +x snyk-linux
+        cp snyk-linux ~/snyk-linux -f
+      shell: bash
+    - name: Authenticate and run Snyk test
+      run: |
+        ~/snyk-linux auth ${{ inputs.snyk_api_key }}
+        ~/snyk-linux test --file=${{ inputs.path_to_dependency_file }} --packageManager=pip --skip-unresolved=true --json-file-output=snyk.json || true
+      shell: bash
+    - name: Create GitHub Issues
+      run: |
+        if ('${{ inputs.create_github_issues }}' -like 'true' ) {
+          $headReference = '${{github.head_ref}}' # This is the source branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow run is a pull_request
+          if ($headReference -ne '') {
+            $reference = $headReference 
+          } else {
+            $reference = '${{github.ref}}'
+          }
+          $splat = @{
+              dotSourceFilePath = 'power-snyk/functions/functions.ps1'    
+              pathToSnykIssues = 'snyk.json'
+              pathToDependencyFile = '${{ inputs.path_to_dependency_file }}'
+              gitHubToken = '${{ inputs.snyk_github_integration_token }}'
+              repository = '${{ inputs.repository }}'
+              branch = $reference
+              runId = '${{ github.run_id }}'
+            }
+            if ('${{ inputs.github_issue_assignee }}' -notlike '' ) {
+              $splat.Add('githubIssueAssignee', '${{ inputs.github_issue_assignee }}')
+            }
+            if ('${{ inputs.security_issues_labels }}' -notlike '' ) {
+              [array]$securityLabels = '${{ inputs.security_issues_labels }}'.Split(',').Trim()
+              $splat.Add('securityLabels', $securityLabels)
+            }
+            if ('${{ inputs.license_issues_labels }}' -notlike '' ) {
+              [array]$licenseLabels = '${{ inputs.license_issues_labels }}'.Split(',').Trim()
+              $splat.Add('licenseLabels', $licenseLabels)
+            }
+          power-snyk/scripts/Set-SnykGitHubIssues.ps1 @splat
+        }
+        if ('${{ inputs.upload_sarif }}' -like 'true') {
+          $headReference = '${{github.head_ref}}' # This is the source branch of the pull request in a workflow run. This property is only available when the event that triggers a workflow run is a pull_request
+          if ($headReference -ne '') {
+            $reference = $headReference 
+          } else {
+            $reference = '${{github.ref}}'
+          }
+          $splat = @{
+              dotSourceFilePath = 'power-snyk/functions/functions.ps1'    
+              pathToSnykIssues = 'snyk.json'
+              pathToDependencyFile = '${{ inputs.path_to_dependency_file }}'
+              gitHubToken = '${{ inputs.snyk_github_integration_token }}'
+              repository = '${{ inputs.repository }}'
+              branch = $reference
+            }
+          power-snyk/scripts/Set-SnykSarifOutput.ps1 @splat
+        }
+      shell: pwsh
