@@ -1,4 +1,7 @@
-name: "Snyk source composition analysis"
+name: "snyk-python"
+branding:
+  icon: 'alert-circle'  
+  color: 'purple'
 description: "This action leverages Snyk Open Source to scan dependencies for known license issues and vulnerabilities."
 inputs:
   snyk_api_key:
