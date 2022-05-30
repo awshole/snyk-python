@@ -77,8 +77,8 @@ runs:
       shell: bash
     - name: Authenticate and run Snyk test
       run: |
-        ~/snyk-linux auth ${{ inputs.snyk_api_key }}
-        ~/snyk-linux test --file=${{ inputs.path_to_dependency_file }} --packageManager=pip --skip-unresolved=true --json-file-output=snyk.json || true
+        snyk auth ${{ inputs.snyk_api_key }}
+        snyk test --file=${{ inputs.path_to_dependency_file }} --packageManager=pip --skip-unresolved=true --json-file-output=snyk.json || true
       shell: bash
     - name: Create GitHub Issues
       run: |
