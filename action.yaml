@@ -70,10 +70,7 @@ runs:
         cat ${{ inputs.path_to_dependency_file }} | sed -e '/^\s*#.*$/d' -e '/^\s*$/d' | xargs -n 1 pip install || true
       shell: bash
     - name: Install Snyk
-      run: |
-        wget -q https://github.com/snyk/snyk/releases/download/v1.518.0/snyk-linux
-        chmod +x snyk-linux
-        cp snyk-linux ~/snyk-linux -f
+      run: npm install snyk -g
       shell: bash
     - name: Authenticate and run Snyk test
       run: |
