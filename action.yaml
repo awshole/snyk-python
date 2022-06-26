@@ -119,13 +119,13 @@ runs:
             $reference = '${{github.ref}}'
           }
           $splat = @{
-              dotSourceFilePath = 'power-snyk/functions/functions.ps1'    
+              language = 'python'    
               pathToSnykIssues = 'snyk.json'
               pathToDependencyFile = '${{ inputs.path_to_dependency_file }}'
               gitHubToken = '${{ inputs.snyk_github_integration_token }}'
               repository = '${{ inputs.repository }}'
               branch = $reference
             }
-          power-snyk/scripts/Set-SnykPythonSarifOutput.ps1 @splat
+          power-snyk/scripts/Set-SnykSarifOutput.ps1 @splat
         }
       shell: pwsh
